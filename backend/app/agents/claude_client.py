@@ -197,10 +197,11 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
 def call_claude(prompt: str, system: str = "", model: str | None = None, max_tokens: int = 2000) -> str:
     """Single-turn completion via Groq, falling back to heuristics if no key is active."""
     p_lower = prompt.lower()
+    s_lower = system.lower()
     
-    # FOOLPROOF RULE: Intercept any owner/creator/author question at the absolute entry point!
-    # This prevents retrieved setup.py context references from confusing the mock router.
-    if "owner" in p_lower or "creator" in p_lower or "author" in p_lower or "who made" in p_lower or "who built" in p_lower:
+    # FOOLPROOF RULE: Intercept any owner/creator/author question only if it's the Tutor Q&A Agent!
+    # This prevents the quiz generator and other non-chat prompts from being hijacked.
+    if "tutor" in s_lower and ("owner" in p_lower or "creator" in p_lower or "author" in p_lower or "who made" in p_lower or "who built" in p_lower):
         return json.dumps({
             "answer": (
                 "### 👑 Project Ownership & Creator Info\n\n"
