@@ -50,6 +50,7 @@ def ingest(req: RepoRequest):
         _REPO_CACHE[result.repo_id] = {
             "ingest_result": result,
             "commit_lookup": {c.sha: c.message for c in result.commits},
+            "quiz_questions": {}, # step_number -> QuizQuestion
         }
 
         return {
@@ -108,10 +109,21 @@ def get_quiz_question(repo_id: str, step_number: int):
     if step is None:
         raise HTTPException(status_code=404, detail=f"step {step_number} not found")
 
-    return generate_quiz_question(step)
+    # Generate and cache question so we can grade against its expected_points
+    question_obj = generate_quiz_question(step)
+    if "quiz_questions" not in cached:
+        cached["quiz_questions"] = {}
+    cached["quiz_questions"][step_number] = question_obj
+    return question_obj
 
 
 @app.post("/quiz/submit", response_model=QuizGrade)
 def submit_quiz_answer(sub: QuizSubmission):
-    _get_cached_repo(sub.repo_id)  # validates repo exists
-    return grade_answer(sub.question, [], sub.user_answer)
+    cached = _get_cached_repo(sub.repo_id)  # validates repo exists
+    
+    # Try retrieving the expected points for the cached question
+    expected_points = []
+    if "quiz_questions" in cached and sub.step_number in cached["quiz_questions"]:
+        expected_points = cached["quiz_questions"][sub.step_number].expected_points
+        
+    return grade_answer(sub.question, expected_points, sub.user_answer)
