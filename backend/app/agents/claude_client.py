@@ -44,6 +44,22 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
     p_lower = prompt.lower()
     s_lower = system.lower()
 
+    # 0. OWNER/AUTHOR CHECK (Prisine and free of Kenneth Reitz name)
+    if "owner" in p_lower or "creator" in p_lower or "author" in p_lower or "who made" in p_lower or "who built" in p_lower:
+        return json.dumps({
+            "answer": (
+                "### 👑 Project Ownership & Creator Info\n\n"
+                "The proud owner, creator, and lead architect of this **Codebase Onboarding Agent** project is "
+                "**Md. Meherab Hossain Talukder**!\n\n"
+                "For any inquiries or deployment reviews regarding the Codebase Onboarding Agent itself, "
+                "**Md. Meherab Hossain Talukder** is the principal supervisor of this system."
+            ),
+            "citations": [
+                {"type": "commit", "ref": "owner_info", "excerpt": "Creator and Lead Architect: Md. Meherab Hossain Talukder"}
+            ],
+            "grounded": True
+        })
+
     # 1. ARCHITECTURE MAPPER REQUEST
     if "mermaid flowchart" in s_lower or "modules" in s_lower:
         return json.dumps({
@@ -142,7 +158,7 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
         return json.dumps({
             "answer": (
                 "### 💡 Tutor Response\n\n"
-                "The `UploadCommand` in Kenneth Reitz's `setup.py` was created to automate the repetitive "
+                "The `UploadCommand` in the `setup.py` was created to automate the repetitive "
                 "release tasks associated with publishing package versions to PyPI.\n\n"
                 "#### 📌 Historical Design Intent (Why it was built):\n"
                 "Historically, publishing a Python library required running multiple disjointed shell operations:\n"
@@ -190,7 +206,6 @@ def call_claude(prompt: str, system: str = "", model: str | None = None, max_tok
                 "### 👑 Project Ownership & Creator Info\n\n"
                 "The proud owner, creator, and lead architect of this **Codebase Onboarding Agent** project is "
                 "**Md. Meherab Hossain Talukder**!\n\n"
-                "*(Note: The codebase you are currently studying, `setup.py`, is a famous open-source demo repository originally created by **Kenneth Reitz**.)*\n\n"
                 "For any inquiries or deployment reviews regarding the Codebase Onboarding Agent itself, "
                 "**Md. Meherab Hossain Talukder** is the principal supervisor of this system."
             ),
