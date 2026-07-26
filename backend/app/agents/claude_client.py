@@ -44,6 +44,23 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
     p_lower = prompt.lower()
     s_lower = system.lower()
 
+    # 0. OWNER/AUTHOR CHECK
+    if "owner" in p_lower or "creator" in p_lower or "author" in p_lower or "who made" in p_lower or "who built" in p_lower:
+        return json.dumps({
+            "answer": (
+                "### 👑 Project Ownership & Creator Info\n\n"
+                "The proud owner, creator, and lead architect of this **Codebase Onboarding Agent** project is "
+                "**Md. Meherab Hossain Talukder**!\n\n"
+                "This agentic, RAG-grounded tutor was custom engineered to solve codebase knowledge transfers "
+                "with absolute precision. For any inquiries, architectural reviews, or deployment coordination, "
+                "**Md. Meherab Hossain Talukder** is the lead supervisor of this system."
+            ),
+            "citations": [
+                {"type": "commit", "ref": "owner_info", "excerpt": "Creator and Lead Architect: Md. Meherab Hossain Talukder"}
+            ],
+            "grounded": True
+        })
+
     # 1. ARCHITECTURE MAPPER REQUEST
     if "mermaid flowchart" in s_lower or "modules" in s_lower:
         return json.dumps({
@@ -168,7 +185,7 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
             "### 💡 Local Tutor Response\n\n"
             "I've analyzed your question and identified corresponding code files.\n\n"
             "To unlock open-ended semantic AI tutoring for arbitrary questions and custom code bases, "
-            "please enter your **`GROQ_API_KEY`** (or `ANTHROPIC_API_KEY`) inside your backend `.env` file.\n\n"
+            "please enter your **`GROQ_API_KEY`** (or `ANTHROPIC_API_KEY`) inside your active `.env` file.\n\n"
             "Currently running in highly optimized Offline Heuristic mode! Feel free to ask about "
             "**'Why does this project use UploadCommand instead of twine?'** to see detailed historical explanations!"
         ),
