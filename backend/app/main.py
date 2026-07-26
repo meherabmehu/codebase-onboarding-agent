@@ -5,6 +5,7 @@ all four agents into a real HTTP API.
 Run with: uvicorn app.main:app --reload --port 8000
 """
 from __future__ import annotations
+import hashlib
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -34,6 +35,10 @@ app.add_middleware(
 _REPO_CACHE: dict[str, dict] = {}
 
 
+def _repo_id(repo_url: str) -> str:
+    return hashlib.sha1(repo_url.encode()).hexdigest()[:12]
+
+
 def is_valid_key(key: str) -> bool:
     """Helper to check if LLM keys are active."""
     if not key:
@@ -52,6 +57,18 @@ def health():
 @app.post("/ingest", response_model=dict)
 def ingest(req: RepoRequest):
     """Clone, parse, and index a repo. Returns repo_id for use in later calls."""
+    repo_id = _repo_id(req.repo_url)
+    
+    # PERFORMANCE OPTIMIZATION: If already ingested and cached, return immediately (0.00s!)
+    if repo_id in _REPO_CACHE:
+        result = _REPO_CACHE[repo_id]["ingest_result"]
+        return {
+            "repo_id": repo_id,
+            "chunks_indexed": len(result.chunks),
+            "commits_pulled": len(result.commits),
+            "prs_pulled": len(result.prs),
+        }
+
     try:
         result = ingest_repo(req.repo_url, req.max_commits)
         index_repo(result)
