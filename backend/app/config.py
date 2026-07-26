@@ -13,6 +13,14 @@ class Settings(BaseSettings):
     claude_model_strong: str = "claude-sonnet-4-6"
     claude_model_fast: str = "claude-haiku-4-5-20251001"
 
+    #Gemini
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash-001"
+
+    #GROQ
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+
     # GitHub
     github_token: str = ""
 
