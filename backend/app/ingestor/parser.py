@@ -6,7 +6,7 @@ not fixed line windows.
 
 Features an elite native Python AST and regex-based fallback in case 
 tree-sitter or tree-sitter-languages are unavailable on the target machine
-(e.g., Python 3.13+ compilation constraints).
+(e.g., Python 3.13+ compilation constraints or Windows DLL conflicts).
 """
 from __future__ import annotations
 import os
@@ -14,12 +14,17 @@ import re
 import ast
 from app.models import CodeChunk
 
-# Try importing tree-sitter, define flag for fallback if it fails
-try:
-    from tree_sitter_languages import get_parser
-    HAS_TREE_SITTER = True
-except ImportError:
+# To prevent buggy native C-extension DLL crashes on Windows/modern environments,
+# we bypass tree-sitter by default on Windows (os.name == "nt") or if explicitly disabled,
+# falling back to our ultra-stable, pure-Python AST & Regex parser.
+if os.name == "nt" or os.environ.get("DISABLE_TREE_SITTER", "true").lower() == "true":
     HAS_TREE_SITTER = False
+else:
+    try:
+        from tree_sitter_languages import get_parser
+        HAS_TREE_SITTER = True
+    except Exception:
+        HAS_TREE_SITTER = False
 
 EXT_TO_LANG = {
     ".py": "python",
