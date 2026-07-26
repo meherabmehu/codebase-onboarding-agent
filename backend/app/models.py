@@ -114,6 +114,12 @@ class QuizQuestion(BaseModel):
     expected_points: list[str]
 
 
+class QuizRequest(BaseModel):
+    repo_id: str
+    step_number: int
+    chat_history: list[dict] = []
+
+
 class QuizSubmission(BaseModel):
     repo_id: str
     step_number: int

@@ -316,7 +316,12 @@ if st.session_state.repo_id:
             
             quiz_q_data = None
             try:
-                resp = requests.get(f"{BACKEND_URL}/quiz/{st.session_state.repo_id}/{active_step_id}", timeout=15)
+                # PERFORMANCE OPTIMIZATION: Post request with active thread history context to trigger ADAPTIVE quizzes based on active chat conversation topics!
+                resp = requests.post(f"{BACKEND_URL}/quiz", json={
+                    "repo_id": st.session_state.repo_id,
+                    "step_number": active_step_id,
+                    "chat_history": active_thread["history"]
+                }, timeout=15)
                 if resp.status_code == 200:
                     quiz_q_data = resp.json()
                 else:
@@ -328,7 +333,7 @@ if st.session_state.repo_id:
                 # Highlighted Question Box
                 st.markdown(f"""
                 <div style='background-color: #fcf3cf; border-left: 4px solid #f1c40f; padding: 15px; border-radius: 8px; margin-bottom: 20px;'>
-                    <span style='font-weight: bold; color: #7d6608;'>❓ Question:</span><br/>
+                    <span style='font-weight: bold; color: #7d6608;'>❓ Question (Based on your Chat Topics):</span><br/>
                     <span style='font-size: 1.05em; color: #2c3e50;'>{quiz_q_data['question']}</span>
                 </div>
                 """, unsafe_allow_html=True)

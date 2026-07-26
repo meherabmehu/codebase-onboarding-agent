@@ -13,7 +13,7 @@ from app.config import settings
 from app.models import (
     RepoRequest, IngestResult, ArchitectureOverview, Curriculum,
     TutorQuestion, TutorAnswer, QuizQuestion, QuizSubmission, QuizGrade,
-    LearningStep, ModuleNode,
+    LearningStep, ModuleNode, QuizRequest,
 )
 from app.ingestor.repo_ingestor import ingest_repo
 from app.indexer.indexer import index_repo
@@ -190,21 +190,22 @@ def ask_tutor(req: TutorQuestion):
     return answer_question(req.repo_id, req.question, cached["commit_lookup"])
 
 
-@app.get("/quiz/{repo_id}/{step_number}", response_model=QuizQuestion)
-def get_quiz_question(repo_id: str, step_number: int):
-    cached = _get_cached_repo(repo_id)
+@app.post("/quiz", response_model=QuizQuestion)
+def get_quiz_question(req: QuizRequest):
+    """Generates an adaptive quiz question based on active chat conversation topics."""
+    cached = _get_cached_repo(req.repo_id)
     curriculum = cached.get("curriculum")
     if curriculum is None:
         raise HTTPException(status_code=400, detail="call /curriculum first")
 
-    step = next((s for s in curriculum.steps if s.step_number == step_number), None)
+    step = next((s for s in curriculum.steps if s.step_number == req.step_number), None)
     if step is None:
-        raise HTTPException(status_code=404, detail=f"step {step_number} not found")
+        raise HTTPException(status_code=404, detail=f"step {req.step_number} not found")
 
-    question_obj = generate_quiz_question(step)
+    question_obj = generate_quiz_question(step, req.chat_history)
     if "quiz_questions" not in cached:
         cached["quiz_questions"] = {}
-    cached["quiz_questions"][step_number] = question_obj
+    cached["quiz_questions"][req.step_number] = question_obj
     return question_obj
 
 
