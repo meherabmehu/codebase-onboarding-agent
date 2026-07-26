@@ -153,7 +153,7 @@ if "curriculum" not in st.session_state:
 if not st.session_state.repo_id:
     try:
         # Silently trigger backend ingestion for setup.py
-        resp = requests.post(f"{BACKEND_URL}/ingest", json={"repo_url": "https://github.com/kennethreitz/setup.py"})
+        resp = requests.post(f"{BACKEND_URL}/ingest", json={"repo_url": "https://github.com/kennethreitz/setup.py"}, timeout=15)
         if resp.status_code == 200:
             data = resp.json()
             st.session_state.repo_id = data["repo_id"]
@@ -243,7 +243,7 @@ with st.sidebar:
         if st.button("Reload Codebase", use_container_width=True):
             with st.spinner("⚡ Loading..."):
                 try:
-                    resp = requests.post(f"{BACKEND_URL}/ingest", json={"repo_url": repo_url})
+                    resp = requests.post(f"{BACKEND_URL}/ingest", json={"repo_url": repo_url}, timeout=15)
                     if resp.status_code == 200:
                         data = resp.json()
                         st.session_state.repo_id = data["repo_id"]
@@ -262,17 +262,23 @@ if st.session_state.repo_id:
     try:
         if st.session_state.architecture is None:
             with st.spinner("Analyzing architecture..."):
-                resp = requests.get(f"{BACKEND_URL}/architecture/{st.session_state.repo_id}")
+                resp = requests.get(f"{BACKEND_URL}/architecture/{st.session_state.repo_id}", timeout=15)
                 if resp.status_code == 200:
                     st.session_state.architecture = resp.json()
+                else:
+                    st.error(f"Backend failed to map architecture (Status {resp.status_code}): {resp.text}")
+                    st.stop()
                     
         if st.session_state.curriculum is None:
             with st.spinner("Designing curriculum..."):
-                resp = requests.get(f"{BACKEND_URL}/curriculum/{st.session_state.repo_id}")
+                resp = requests.get(f"{BACKEND_URL}/curriculum/{st.session_state.repo_id}", timeout=15)
                 if resp.status_code == 200:
                     st.session_state.curriculum = resp.json()
+                else:
+                    st.error(f"Backend failed to build curriculum (Status {resp.status_code}): {resp.text}")
+                    st.stop()
     except Exception as e:
-        st.error(f"Error communicating with FastAPI backend: {e}")
+        st.error(f"Failed to communicate with FastAPI backend: {e}")
         st.stop()
         
     if st.session_state.curriculum and st.session_state.architecture:
@@ -287,6 +293,15 @@ if st.session_state.repo_id:
         # Title Header
         st.markdown(f"## 🤖 Codebase Onboarding Agent: {st.session_state.repo_title}")
         st.caption(f"Active Lesson: Step {active_step_id} — **{step_meta['title']}**")
+        
+        # Elegant Lesson Banner on Top
+        st.markdown(f"""
+        <div class='lesson-card'>
+            <div class='badge'>Active Step {active_step_id} of {total_steps} — Focus: {", ".join(step_meta['file_paths'])}</div>
+            <div class='step-title'>{step_meta['title']}</div>
+            <div class='rationale-text'>{step_meta['rationale']}</div>
+        </div>
+        """, unsafe_allow_html=True)
         
         # --- THE ULTRACLEAN TAB DECOUPLING SYSTEM (Perfect, minimalist, modern AI interface) ---
         tab_chat, tab_quiz, tab_diagram, tab_analytics = st.tabs([
@@ -340,7 +355,7 @@ if st.session_state.repo_id:
                         resp = requests.post(f"{BACKEND_URL}/ask", json={
                             "repo_id": st.session_state.repo_id,
                             "question": user_q
-                        })
+                        }, timeout=30)
                         if resp.status_code == 200:
                             data = resp.json()
                             answer = data["answer"]
@@ -374,7 +389,7 @@ if st.session_state.repo_id:
             
             quiz_q_data = None
             try:
-                resp = requests.get(f"{BACKEND_URL}/quiz/{st.session_state.repo_id}/{active_step_id}")
+                resp = requests.get(f"{BACKEND_URL}/quiz/{st.session_state.repo_id}/{active_step_id}", timeout=15)
                 if resp.status_code == 200:
                     quiz_q_data = resp.json()
                 else:
@@ -411,7 +426,7 @@ if st.session_state.repo_id:
                                 "step_number": active_step_id,
                                 "question": quiz_q_data["question"],
                                 "user_answer": user_answer
-                            })
+                            }, timeout=15)
                             if sub_resp.status_code == 200:
                                 grade_data = sub_resp.json()
                                 passed = grade_data["passed"]
