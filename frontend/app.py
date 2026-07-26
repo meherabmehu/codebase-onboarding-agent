@@ -319,13 +319,6 @@ else:
                 st.markdown("#### Talk to your Onboarding Tutor")
                 st.caption("Ask questions about why methods were built, who authored them, or how the configuration operates.")
                 
-                # Big Welcoming Call To Action Box (so they know what to ask)
-                st.markdown("""
-                <div style='background-color: #ebf5fb; border-left: 4px solid #3498db; padding: 12px 15px; border-radius: 4px; margin-bottom: 15px;'>
-                    <b>🎓 Tutor Tip</b>: Click one of the suggested buttons below to instantly ask me an architectural 'why' question about this lesson's files!
-                </div>
-                """, unsafe_allow_html=True)
-                
                 # suggested question triggers
                 st.write("👉 *Click a suggested question to run it instantly:*")
                 cols = st.columns(2)
@@ -356,17 +349,12 @@ else:
                 st.divider()
                 
                 # Chat History Box
-                if not st.session_state.chat_history:
-                    # If empty history, show a friendly greetings
-                    with st.chat_message("assistant", avatar="🤖"):
-                        st.markdown(f"Hello! I am your Onboarding Tutor. I have indexed the files for **Step {active_step_id}: {step_meta['title']}**. Click one of the suggested questions above, or type any custom query below to learn why this code was built this way!")
-                else:
-                    for msg in st.session_state.chat_history:
-                        with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
-                            st.markdown(msg["content"])
+                for msg in st.session_state.chat_history:
+                    with st.chat_message(msg["role"], avatar="🤖" if msg["role"] == "assistant" else "👤"):
+                        st.markdown(msg["content"])
                             
                 # Query input
-                user_q = st.chat_input("Ask me anything about these files (e.g. 'Why was this written this way?')")
+                user_q = st.chat_input("Ask me anything about these files...")
                 if suggested_q:
                     user_q = suggested_q
                     
