@@ -290,13 +290,13 @@ else:
             </div>
             """, unsafe_allow_html=True)
             
-            # Module blueprint map
-            with st.expander("🗺️ View Codebase Module Blueprint Flow", expanded=True):
+            # Module blueprint map - set expanded=False to keep layout super neat by default!
+            with st.expander("🗺️ View Codebase Module Blueprint Flow", expanded=False):
                 st.caption("This visual map displays how system files and components connect together:")
                 render_mermaid(arch.get("mermaid_diagram", "graph TD\n  A[No diagram loaded]"))
                 
-            # Full Curriculum Timeline Card
-            with st.expander("📚 Your Full Curriculum Pathway"):
+            # Full Curriculum Timeline Card - set expanded=False to keep layout super neat by default!
+            with st.expander("📚 Your Full Curriculum Pathway", expanded=False):
                 st.write("Follow this timeline to fully onboard to this repository:")
                 for step in steps:
                     sid = step["step_number"]
