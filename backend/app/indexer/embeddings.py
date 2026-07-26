@@ -5,7 +5,7 @@ historical context alongside the code itself (not just code-to-code
 similarity).
 
 Includes an elite offline fallback mode that generates deterministic,
-normalized mock vectors in the absence of a VOYAGE_API_KEY.
+normalized mock vectors in the absence of a valid VOYAGE_API_KEY.
 """
 from __future__ import annotations
 import hashlib
@@ -15,12 +15,24 @@ from app.config import settings
 _client = None
 
 
+def is_valid_key(key: str) -> bool:
+    """Checks if a loaded API key is a valid key and not a dummy placeholder or empty quotes."""
+    if not key:
+        return False
+    cleaned = key.strip().strip("'\"").strip()
+    if not cleaned or len(cleaned) < 10 or "your-" in cleaned or "placeholder" in cleaned:
+        return False
+    return True
+
+
 def _get_client() -> voyageai.Client | None:
     global _client
-    if not settings.voyage_api_key:
+    if not is_valid_key(settings.voyage_api_key):
         return None
     if _client is None:
-        _client = voyageai.Client(api_key=settings.voyage_api_key)
+        # Strip any accidental outer quotes from environment loading
+        api_key = settings.voyage_api_key.strip().strip("'\"")
+        _client = voyageai.Client(api_key=api_key)
     return _client
 
 

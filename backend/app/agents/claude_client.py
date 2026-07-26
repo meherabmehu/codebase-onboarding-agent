@@ -5,7 +5,7 @@ without billing setup. Function name `call_claude` is kept as the
 stable interface so agents don't need to change if you swap providers.
 
 Includes an elite offline mock engine that automatically activates when
-no GROQ_API_KEY is found. This enables instant out-of-the-box local testing
+no valid GROQ_API_KEY is found. This enables instant out-of-the-box local testing
 with Kenneth Reitz's setup.py repository, complete with written overviews,
 Mermaid dependency graphs, curriculum steps, and interactive quizzes!
 """
@@ -18,12 +18,24 @@ from app.config import settings
 _client: Groq | None = None
 
 
+def is_valid_key(key: str) -> bool:
+    """Checks if a loaded API key is a valid key and not a dummy placeholder or empty quotes."""
+    if not key:
+        return False
+    cleaned = key.strip().strip("'\"").strip()
+    if not cleaned or len(cleaned) < 10 or "your-" in cleaned or "placeholder" in cleaned:
+        return False
+    return True
+
+
 def _get_client() -> Groq | None:
     global _client
-    if not settings.groq_api_key:
+    if not is_valid_key(settings.groq_api_key):
         return None
     if _client is None:
-        _client = Groq(api_key=settings.groq_api_key)
+        # Strip any accidental outer quotes from environment loading
+        api_key = settings.groq_api_key.strip().strip("'\"")
+        _client = Groq(api_key=api_key)
     return _client
 
 
