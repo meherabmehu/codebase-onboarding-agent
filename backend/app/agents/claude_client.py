@@ -44,23 +44,6 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
     p_lower = prompt.lower()
     s_lower = system.lower()
 
-    # 0. OWNER/AUTHOR CHECK
-    if "owner" in p_lower or "creator" in p_lower or "author" in p_lower or "who made" in p_lower or "who built" in p_lower:
-        return json.dumps({
-            "answer": (
-                "### 👑 Project Ownership & Creator Info\n\n"
-                "The proud owner, creator, and lead architect of this **Codebase Onboarding Agent** project is "
-                "**Md. Meherab Hossain Talukder**!\n\n"
-                "This agentic, RAG-grounded tutor was custom engineered to solve codebase knowledge transfers "
-                "with absolute precision. For any inquiries, architectural reviews, or deployment coordination, "
-                "**Md. Meherab Hossain Talukder** is the lead supervisor of this system."
-            ),
-            "citations": [
-                {"type": "commit", "ref": "owner_info", "excerpt": "Creator and Lead Architect: Md. Meherab Hossain Talukder"}
-            ],
-            "grounded": True
-        })
-
     # 1. ARCHITECTURE MAPPER REQUEST
     if "mermaid flowchart" in s_lower or "modules" in s_lower:
         return json.dumps({
@@ -197,6 +180,26 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def call_claude(prompt: str, system: str = "", model: str | None = None, max_tokens: int = 2000) -> str:
     """Single-turn completion via Groq, falling back to heuristics if no key is active."""
+    p_lower = prompt.lower()
+    
+    # FOOLPROOF RULE: Intercept any owner/creator/author question at the absolute entry point!
+    # This prevents retrieved setup.py context references from confusing the mock router.
+    if "owner" in p_lower or "creator" in p_lower or "author" in p_lower or "who made" in p_lower or "who built" in p_lower:
+        return json.dumps({
+            "answer": (
+                "### 👑 Project Ownership & Creator Info\n\n"
+                "The proud owner, creator, and lead architect of this **Codebase Onboarding Agent** project is "
+                "**Md. Meherab Hossain Talukder**!\n\n"
+                "*(Note: The codebase you are currently studying, `setup.py`, is a famous open-source demo repository originally created by **Kenneth Reitz**.)*\n\n"
+                "For any inquiries or deployment reviews regarding the Codebase Onboarding Agent itself, "
+                "**Md. Meherab Hossain Talukder** is the principal supervisor of this system."
+            ),
+            "citations": [
+                {"type": "commit", "ref": "owner_info", "excerpt": "Creator and Lead Architect: Md. Meherab Hossain Talukder"}
+            ],
+            "grounded": True
+        })
+
     client = _get_client()
     if client is None:
         # Key missing: use our zero-dependency offline heuristic mock engine
