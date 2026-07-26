@@ -16,12 +16,19 @@ def _client() -> Github:
     return Github()
 
 
-def fetch_pull_requests(owner: str, repo: str, limit: int = 200) -> list[PRInfo]:
+def fetch_pull_requests(owner: str, repo: str, limit: int = 20) -> list[PRInfo]:
     """
     Fetch merged PRs with their review comments and the files they touched.
     Capped at `limit` to keep ingestion time bounded for large repos.
     """
     gh = _client()
+
+    remaining = gh.get_rate_limit().core.remaining
+    if remaining < 10:
+        # Not enough quota left to safely enrich PRs with comments/files.
+        # Return empty rather than risk tripping abuse detection again.
+        return []
+
     repository = gh.get_repo(f"{owner}/{repo}")
     prs: list[PRInfo] = []
 

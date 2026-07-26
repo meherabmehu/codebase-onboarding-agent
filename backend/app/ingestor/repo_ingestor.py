@@ -10,6 +10,7 @@ code alone.
 from __future__ import annotations
 import os
 import re
+import stat
 import hashlib
 import shutil
 from git import Repo
@@ -23,10 +24,16 @@ def _repo_id(repo_url: str) -> str:
     return hashlib.sha1(repo_url.encode()).hexdigest()[:12]
 
 
+def _remove_readonly(func, path, _exc_info):
+    """Windows marks .git object files read-only; clear that before deleting."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
 def _clone_repo(repo_url: str, repo_id: str) -> str:
     local_path = os.path.join(settings.data_dir, "repos", repo_id)
     if os.path.exists(local_path):
-        shutil.rmtree(local_path)
+        shutil.rmtree(local_path, onerror=_remove_readonly)
     os.makedirs(os.path.dirname(local_path), exist_ok=True)
     Repo.clone_from(repo_url, local_path, depth=500)  # shallow clone: bound ingestion time
     return local_path
