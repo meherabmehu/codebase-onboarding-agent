@@ -3,16 +3,22 @@ Wraps Voyage AI's code-aware embedding model. Each CodeChunk gets embedded
 together with its linked commit/PR text, so retrieval surfaces the
 historical context alongside the code itself (not just code-to-code
 similarity).
+
+Includes an elite offline fallback mode that generates deterministic,
+normalized mock vectors in the absence of a VOYAGE_API_KEY.
 """
 from __future__ import annotations
+import hashlib
 import voyageai
 from app.config import settings
 
 _client = None
 
 
-def _get_client() -> voyageai.Client:
+def _get_client() -> voyageai.Client | None:
     global _client
+    if not settings.voyage_api_key:
+        return None
     if _client is None:
         _client = voyageai.Client(api_key=settings.voyage_api_key)
     return _client
@@ -31,15 +37,32 @@ def build_embedding_text(chunk_source: str, commit_messages: list[str], pr_title
     return "\n\n".join(parts)
 
 
+def deterministic_mock_vector(text: str, dim: int = 1024) -> list[float]:
+    """Generates a normalized, deterministic 1024-dimension float vector."""
+    vector = []
+    # Use deterministic pseudo-random floats based on text hash
+    for i in range(dim):
+        h = hashlib.sha256(f"{text}_{i}".encode()).hexdigest()
+        val = int(h[:8], 16) / 4294967295.0 * 2.0 - 1.0
+        vector.append(val)
+    # Normalize vector
+    mag = sum(x*x for x in vector) ** 0.5
+    if mag > 0:
+        return [x / mag for x in vector]
+    return [0.0] * dim
+
+
 def embed_texts(texts: list[str], input_type: str = "document") -> list[list[float]]:
     """
     input_type: "document" when embedding chunks for storage,
                 "query" when embedding a user's question at retrieval time.
-    Batches in groups of 128 (Voyage's practical batch limit).
     """
     client = _get_client()
-    all_embeddings: list[list[float]] = []
+    if client is None:
+        # Offline/Heuristic mode: return deterministic mock vectors
+        return [deterministic_mock_vector(t) for t in texts]
 
+    all_embeddings: list[list[float]] = []
     for i in range(0, len(texts), 128):
         batch = texts[i:i + 128]
         result = client.embed(batch, model=settings.voyage_model, input_type=input_type)
