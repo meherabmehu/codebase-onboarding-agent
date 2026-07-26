@@ -36,24 +36,6 @@ st.markdown("""
         font-size: 1.1em;
         color: #64748b;
     }
-    /* Style Prompt Buttons like ChatGPT chips */
-    .prompt-chip {
-        background-color: #f1f5f9;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 8px 12px;
-        margin: 5px;
-        font-size: 0.85em;
-        cursor: pointer;
-        display: inline-block;
-        color: #475569;
-        transition: all 0.2s;
-    }
-    .prompt-chip:hover {
-        background-color: #e2e8f0;
-        border-color: #cbd5e1;
-        color: #1e293b;
-    }
     /* Metric Card Styling */
     .metric-card {
         background-color: #f8fafc;
@@ -94,12 +76,6 @@ if "active_thread_id" not in st.session_state:
 if "threads" not in st.session_state:
     # List of threads. Thread shape: {"id": int, "title": str, "history": list}
     st.session_state.threads = [{"id": 0, "title": "New Chat Session", "history": []}]
-if "active_step" not in st.session_state:
-    st.session_state.active_step = 1
-if "completed_steps" not in st.session_state:
-    st.session_state.completed_steps = set()
-if "quiz_grades" not in st.session_state:
-    st.session_state.quiz_grades = {}  # step_number: (passed, feedback, user_answer)
 if "architecture" not in st.session_state:
     st.session_state.architecture = None
 if "curriculum" not in st.session_state:
@@ -145,7 +121,6 @@ with st.sidebar:
     
     # List active chat threads in sidebar
     for thread in st.session_state.threads:
-        btn_type = "secondary"
         lbl = thread["title"]
         if thread["id"] == st.session_state.active_thread_id:
             lbl = f"👉 {thread['title']}"
@@ -154,26 +129,6 @@ with st.sidebar:
             st.session_state.active_thread_id = thread["id"]
             st.rerun()
             
-    st.divider()
-    
-    # Lesson completion guide (tucked safely inside the sidebar to stay clean)
-    if st.session_state.repo_id and st.session_state.curriculum:
-        st.write("📚 **Lesson Roadmap**")
-        steps = st.session_state.curriculum.get("steps", [])
-        for step in steps:
-            sid = step["step_number"]
-            is_comp = sid in st.session_state.completed_steps
-            is_act = (sid == st.session_state.active_step)
-            
-            icon = "✅" if is_comp else ("🎯" if is_act else "🔒")
-            lbl = f"Step {sid}: {step['title']}"
-            if is_act:
-                lbl = f"👉 **Step {sid}: {step['title']}**"
-                
-            if st.button(f"{icon} {lbl}", key=f"nav_step_btn_{sid}", use_container_width=True):
-                st.session_state.active_step = sid
-                st.rerun()
-                
     st.divider()
     
     # ⚙️ COLLAPSIBLE DEVELOPER SETTINGS (Tucked safely out of visual clutter!)
@@ -239,21 +194,14 @@ if st.session_state.repo_id:
         
     if st.session_state.curriculum and st.session_state.architecture:
         arch = st.session_state.architecture
-        curr = st.session_state.curriculum
-        steps = curr.get("steps", [])
-        total_steps = len(steps)
-        
-        active_step_id = st.session_state.active_step
-        step_meta = next((s for s in steps if s["step_number"] == active_step_id), steps[0])
 
         # Title Header (Prisine minimalist header)
         st.markdown(f"## 🤖 Codebase Onboarding Agent: {st.session_state.repo_title}")
-        st.caption(f"Active Lesson: Step {active_step_id} — **{step_meta['title']}**")
+        st.caption("A clean, interactive assistant that teaches you the codebase entirely through natural conversation.")
         
-        # --- THE ULTRACLEAN TAB DECOUPLING SYSTEM (No complex active step cards or blueprint diagrams) ---
-        tab_chat, tab_quiz, tab_analytics = st.tabs([
+        # --- THE ULTRACLEAN TAB DECOUPLING SYSTEM (Chat & Analytics only, no Quizzes or Roadmap steps!) ---
+        tab_chat, tab_analytics = st.tabs([
             "💬 Interactive Chat", 
-            "✍️ Practice Quiz", 
             "📊 Contributor Metrics"
         ])
         
@@ -264,7 +212,7 @@ if st.session_state.repo_id:
                 st.markdown(f"""
                 <div class='chat-hero' style='margin-top: 5vh;'>
                     <h1 style='font-size: 2.2em;'>🤖 Ask your Codebase Tutor</h1>
-                    <p style='font-size: 1.1em;'>How can I help you understand these files today: {", ".join(step_meta['file_paths'])}?</p>
+                    <p style='font-size: 1.1em;'>How can I help you understand this repository today?</p>
                 </div>
                 """, unsafe_allow_html=True)
             else:
@@ -328,84 +276,7 @@ if st.session_state.repo_id:
                         st.error(f"Failed to communicate with Tutor service: {e}")
                 st.rerun()
 
-        # --- TAB 2: PRACTICE QUIZ ---
-        with tab_quiz:
-            st.markdown("#### Test Your Understanding to Advance")
-            st.caption("Answer this conceptual open-ended check question. Your answer will be evaluated instantly against required technical keywords.")
-            
-            quiz_q_data = None
-            try:
-                resp = requests.get(f"{BACKEND_URL}/quiz/{st.session_state.repo_id}/{active_step_id}", timeout=15)
-                if resp.status_code == 200:
-                    quiz_q_data = resp.json()
-                else:
-                    st.error(f"Failed to load quiz: {resp.text}")
-            except Exception as e:
-                st.error(f"Failed to connect to quiz service: {e}")
-                
-            if quiz_q_data:
-                # Highlighted Question Box
-                st.markdown(f"""
-                <div style='background-color: #fcf3cf; border-left: 4px solid #f1c40f; padding: 15px; border-radius: 8px; margin-bottom: 20px;'>
-                    <span style='font-weight: bold; color: #7d6608;'>❓ Question:</span><br/>
-                    <span style='font-size: 1.05em; color: #2c3e50;'>{quiz_q_data['question']}</span>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Answer submission
-                stored_ans = ""
-                if active_step_id in st.session_state.quiz_grades:
-                    stored_ans = st.session_state.quiz_grades[active_step_id][2]
-                    
-                user_answer = st.text_area(
-                    "Type your conceptual explanation here (use full sentences to show reasoning):",
-                    value=stored_ans,
-                    height=120,
-                    key=f"text_ans_step_{active_step_id}"
-                )
-                
-                if st.button("📝 Submit My Answer for Grading", type="primary", use_container_width=True):
-                    with st.spinner("Tutor is evaluating your submission..."):
-                        try:
-                            sub_resp = requests.post(f"{BACKEND_URL}/quiz/submit", json={
-                                "repo_id": st.session_state.repo_id,
-                                "step_number": active_step_id,
-                                "question": quiz_q_data["question"],
-                                "user_answer": user_answer
-                            }, timeout=15)
-                            if sub_resp.status_code == 200:
-                                grade_data = sub_resp.json()
-                                passed = grade_data["passed"]
-                                feedback = grade_data["feedback"]
-                                st.session_state.quiz_grades[active_step_id] = (passed, feedback, user_answer)
-                                if passed:
-                                    st.session_state.completed_steps.add(active_step_id)
-                                st.rerun()
-                            else:
-                                st.error(f"Grading failed: {sub_resp.text}")
-                        except Exception as e:
-                            st.error(f"Failed to connect to grading server: {e}")
-                            
-                # Grade displays
-                if active_step_id in st.session_state.quiz_grades:
-                    passed, feedback, ans = st.session_state.quiz_grades[active_step_id]
-                    st.divider()
-                    if passed:
-                        st.success("🎉 **SUCCESS — Lesson Completed!**")
-                        st.markdown(feedback)
-                        
-                        if active_step_id < total_steps:
-                            if st.button("Unlock Next Step 🔓", type="primary", use_container_width=True):
-                                st.session_state.active_step = active_step_id + 1
-                                st.rerun()
-                        else:
-                            st.balloons()
-                            st.success("🎓 **CONGRATULATIONS! You have completed all lessons and successfully onboarded!**")
-                    else:
-                        st.error("❌ **REVISION SUGGESTED**")
-                        st.markdown(feedback)
-
-        # --- TAB 3: DYNAMIC REAL-TIME PROGRESS & DIAGNOSTIC METRICS ---
+        # --- TAB 2: DYNAMIC REAL-TIME PROGRESS & DIAGNOSTIC METRICS ---
         with tab_analytics:
             st.markdown("#### 📊 Dynamic Contributor Metrics & Diagnostic Report")
             st.write("These metrics track codebase properties and update in real-time based on your active tutoring interactions!")
