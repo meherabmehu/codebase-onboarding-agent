@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import streamlit as st
 
@@ -66,6 +67,27 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Local Thread Persistence (Matches ChatGPT/Claude persistent sidebar history!)
+CHAT_HISTORY_FILE = "chat_history.json"
+
+def load_threads():
+    """Loads chat threads from local JSON file to survive browser refreshes."""
+    if os.path.exists(CHAT_HISTORY_FILE):
+        try:
+            with open(CHAT_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return [{"id": 0, "title": "New Chat Session", "history": []}]
+
+def save_threads():
+    """Saves active chat threads to local JSON file."""
+    try:
+        with open(CHAT_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(st.session_state.threads, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
 # Initialize Session State variables
 if "repo_id" not in st.session_state:
     st.session_state.repo_id = ""
@@ -74,8 +96,7 @@ if "repo_title" not in st.session_state:
 if "active_thread_id" not in st.session_state:
     st.session_state.active_thread_id = 0
 if "threads" not in st.session_state:
-    # List of threads. Thread shape: {"id": int, "title": str, "history": list}
-    st.session_state.threads = [{"id": 0, "title": "New Chat Session", "history": []}]
+    st.session_state.threads = load_threads()
 if "active_step" not in st.session_state:
     st.session_state.active_step = 1
 if "completed_steps" not in st.session_state:
@@ -121,6 +142,7 @@ with st.sidebar:
         new_id = len(st.session_state.threads)
         st.session_state.threads.insert(0, {"id": new_id, "title": f"Chat Session {new_id + 1}", "history": []})
         st.session_state.active_thread_id = new_id
+        save_threads()
         st.rerun()
         
     st.write("💬 **Recent Chats**")
@@ -188,6 +210,7 @@ with st.sidebar:
                         st.session_state.threads = [{"id": 0, "title": "New Chat Session", "history": []}]
                         st.session_state.active_thread_id = 0
                         st.session_state.repo_title = repo_option if repo_option != "⚡ Link Custom GitHub Repo" else repo_url.split("github.com/")[-1]
+                        save_threads()
                         st.success("🎉 Updated!")
                         st.rerun()
                 except Exception as e:
@@ -276,6 +299,8 @@ if st.session_state.repo_id:
                     short_title = user_q[:25] + "..." if len(user_q) > 25 else user_q
                     active_thread["title"] = short_title
                     
+                save_threads()
+                
                 # Call backend /ask
                 with st.spinner("Tutor is reading code..."):
                     try:
@@ -303,6 +328,7 @@ if st.session_state.repo_id:
                                 "content": answer,
                                 "citations": citations
                             })
+                            save_threads()
                         else:
                             st.error(f"Error from Tutor: {resp.text}")
                     except Exception as e:
@@ -334,7 +360,7 @@ if st.session_state.repo_id:
                         st.error(f"Failed to load quiz: {resp.text}")
                 except Exception as e:
                     st.error(f"Failed to connect to quiz service: {e}")
-                    
+                
                 if quiz_q_data:
                     # Highlighted Question Box
                     st.markdown(f"""
