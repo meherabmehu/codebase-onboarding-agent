@@ -139,14 +139,14 @@ if not st.session_state.repo_id:
             st.session_state.repo_id = data["repo_id"]
             st.session_state.repo_title = "setup.py (Demo)"
             
-            # Baseline counts for startup thread
+            # Baseline counts for startup thread (Safe getters to prevent KeyError!)
             if len(st.session_state.threads) > 0:
                 first_thread = st.session_state.threads[0]
                 if not first_thread.get("total_files"):
-                    first_thread["total_files"] = data["total_files_count"]
-                    first_thread["total_chunks"] = data["chunks_indexed"]
-                    first_thread["total_classes"] = data["total_classes_count"]
-                    first_thread["total_functions"] = data["total_functions_count"]
+                    first_thread["total_files"] = data.get("total_files_count", 1) or 1
+                    first_thread["total_chunks"] = data.get("chunks_indexed", 1) or 1
+                    first_thread["total_classes"] = data.get("total_classes_count", 0) or 0
+                    first_thread["total_functions"] = data.get("total_functions_count", 0) or 0
                     first_thread["visited_files"] = []
                     first_thread["visited_chunks"] = []
                     first_thread["has_git_history"] = False
@@ -249,10 +249,10 @@ with st.sidebar:
                             "id": 0, 
                             "title": "New Chat Session", 
                             "history": [],
-                            "total_files": data["total_files_count"],
-                            "total_chunks": data["chunks_indexed"],
-                            "total_classes": data["total_classes_count"],
-                            "total_functions": data["total_functions_count"],
+                            "total_files": data.get("total_files_count", 1) or 1,
+                            "total_chunks": data.get("chunks_indexed", 1) or 1,
+                            "total_classes": data.get("total_classes_count", 0) or 0,
+                            "total_functions": data.get("total_functions_count", 0) or 0,
                             "visited_files": [],
                             "visited_chunks": [],
                             "has_git_history": False,
@@ -276,10 +276,10 @@ if st.session_state.repo_id:
                 if resp.status_code == 200:
                     st.session_state.architecture = resp.json()
                     
-                    # Update thread metrics baseline if they were empty or uninitialized
+                    # Update thread metrics baseline if they were empty or uninitialized (Safe Getters!)
                     if not active_thread.get("total_files"):
-                        active_thread["total_files"] = st.session_state.architecture.get("total_files_count", 0)
-                        active_thread["total_chunks"] = st.session_state.architecture.get("total_chunks_count", 0)
+                        active_thread["total_files"] = st.session_state.architecture.get("total_files_count", 1) or 1
+                        active_thread["total_chunks"] = st.session_state.architecture.get("total_chunks_count", 1) or 1
                         save_threads()
                 else:
                     st.error(f"Backend failed to map architecture (Status {resp.status_code}): {resp.text}")
@@ -504,16 +504,16 @@ if st.session_state.repo_id:
                             st.error("❌ **REVISION SUGGESTED**")
                             st.markdown(feedback)
 
-        # --- TAB 3: DYNAMIC REAL-TIME PROGRESS & DIAGNOSTIC METRICS (COMPREHENSIVELY REFACETORED FROM SCRATCH!) ---
+        # --- TAB 3: DYNAMIC REAL-TIME PROGRESS & DIAGNOSTIC METRICS ---
         with tab_analytics:
             st.markdown("#### 📊 Dynamic Repository Metrics & Diagnostic Report")
             st.write("These metrics track codebase properties and update in real-time based on your actual active discussion depth!")
             
+            # Fetch and calculate unique repository metrics
             num_exchanges = len(active_thread["history"])
             
-            # Retrieve the LOCKED baseline counts from current thread state
+            # Fetch CONSTANT baseline counts directly from active thread dictionary (Safe Fallback to avoid KeyError!)
             total_files = active_thread.get("total_files", 0) or arch.get("total_files_count", 1) or 1
-            total_chunks = active_thread.get("total_chunks", 0) or arch.get("total_chunks_count", 1) or 1
             
             # Fetch visited lists (duplicate protected via list-membership checks during appending)
             visited_files_list = active_thread.get("visited_files", [])
