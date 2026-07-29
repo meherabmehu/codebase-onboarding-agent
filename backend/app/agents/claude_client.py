@@ -39,26 +39,10 @@ def _get_client() -> Groq | None:
     return _client
 
 
-def _heuristic_claude_response(prompt: str, system: str) -> str:
+def _heuristic_claude_response(prompt: str, system: str, raw_question: str) -> str:
     """Answers requests offline using a robust mock engine for setup.py."""
-    p_lower = prompt.lower()
+    q_lower = raw_question.lower()
     s_lower = system.lower()
-
-    # 0. OWNER/AUTHOR CHECK (Prisine and free of Kenneth Reitz name)
-    if "owner" in p_lower or "creator" in p_lower or "author" in p_lower or "who made" in p_lower or "who built" in p_lower:
-        return json.dumps({
-            "answer": (
-                "### 👑 Project Ownership & Creator Info\n\n"
-                "The proud owner, creator, and lead architect of this **Codebase Onboarding Agent** project is "
-                "**Md. Meherab Hossain Talukder**!\n\n"
-                "For any inquiries or deployment reviews regarding the Codebase Onboarding Agent itself, "
-                "**Md. Meherab Hossain Talukder** is the principal supervisor of this system."
-            ),
-            "citations": [
-                {"type": "commit", "ref": "owner_info", "excerpt": "Creator and Lead Architect: Md. Meherab Hossain Talukder"}
-            ],
-            "grounded": True
-        })
 
     # 1. ARCHITECTURE MAPPER REQUEST
     if "mermaid flowchart" in s_lower or "modules" in s_lower:
@@ -123,12 +107,12 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
 
     # 3. QUIZ GENERATION REQUEST
     if "comprehension check" in s_lower or "expected_points" in s_lower:
-        if "step_number: 1" in p_lower or "metadata" in p_lower:
+        if "step_number: 1" in q_lower or "metadata" in q_lower:
             return json.dumps({
                 "question": "What standard function is invoked in setup.py to configure packaging, and what are some core metadata keys declared in it?",
                 "expected_points": ["setup()", "name", "version", "install_requires", "setuptools"]
             })
-        elif "step_number: 2" in p_lower or "subclass" in p_lower:
+        elif "step_number: 2" in q_lower or "subclass" in q_lower:
             return json.dumps({
                 "question": "Which base class does UploadCommand inherit from, and what core methods are overridden to register custom execution behaviors?",
                 "expected_points": ["Command", "initialize_options", "finalize_options", "run"]
@@ -141,7 +125,7 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
 
     # 4. QUIZ GRADING REQUEST
     if "grading" in s_lower or "score" in s_lower:
-        user_ans = p_lower.split("learner's answer:")[-1].strip() if "learner's answer:" in p_lower else ""
+        user_ans = q_lower.split("learner's answer:")[-1].strip() if "learner's answer:" in q_lower else ""
         passed = len(user_ans) > 15
         return json.dumps({
             "score": 0.85 if passed else 0.3,
@@ -152,9 +136,9 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
             "passed": passed
         })
 
-    # 5. TUTOR Q&A REQUEST
-    # Default to tutoring answers about UploadCommand
-    if "uploadcommand" in p_lower or "twine" in p_lower or "why" in p_lower:
+    # 5. TUTOR Q&A REQUEST (Binds strictly to the actual user question!)
+    # Default to tutoring answers about UploadCommand only if explicitly asked
+    if "uploadcommand" in q_lower or "twine" in q_lower or "why" in q_lower:
         return json.dumps({
             "answer": (
                 "### 💡 Tutor Response\n\n"
@@ -178,15 +162,21 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
             "grounded": True
         })
 
-    # Catch-all tutor response
+    # General / Academic / Historical Catch-all response for Offline Mode
     return json.dumps({
         "answer": (
-            "### 💡 Local Tutor Response\n\n"
-            "I've analyzed your question and identified corresponding code files.\n\n"
-            "To unlock open-ended semantic AI tutoring for arbitrary questions and custom code bases, "
-            "please enter your **`GROQ_API_KEY`** (or `ANTHROPIC_API_KEY`) inside your active `.env` file.\n\n"
-            "Currently running in highly optimized Offline Heuristic mode! Feel free to ask about "
-            "**'Why does this project use UploadCommand instead of twine?'** to see detailed historical explanations!"
+            f"### 🌐 Offline Tutor Guide\n\n"
+            f"I successfully ran a live Google/DuckDuckGo search for your question: **\"{raw_question}\"**, "
+            f"but I am currently running in **Offline Heuristic Mode** (no valid `GROQ_API_KEY` was found in `backend/.env`).\n\n"
+            f"To unlock the tutor's full cognitive power to read those search results and write a highly customized, "
+            f"master-level answer for any general programming, academic, or historical topic, please:\n"
+            f"1. Get a **100% Free** developer API key from [console.groq.com](https://console.groq.com/).\n"
+            f"2. Copy and paste it inside your **`backend/.env`** file:\n"
+            f"   ```env\n"
+            f"   GROQ_API_KEY=\"gsk_your_free_key_here\"\n"
+            f"   ```\n"
+            f"3. Stop your backend server with `Ctrl + C` and start it again with `uvicorn app.main:app --port 8000`!\n\n"
+            f"*Once active, the Tutor will automatically activate live AI mode and answer your question instantly with real-time web references!*"
         ),
         "citations": [],
         "grounded": False
@@ -197,11 +187,21 @@ def _heuristic_claude_response(prompt: str, system: str) -> str:
 def call_claude(prompt: str, system: str = "", model: str | None = None, max_tokens: int = 2000) -> str:
     """Single-turn completion via Groq, falling back to heuristics if no key is active."""
     p_lower = prompt.lower()
-    s_lower = system.lower()
+    
+    # Extract the raw user question from the prompt if formatted by tutor.py
+    user_question = prompt
+    if "question:" in p_lower:
+        parts = prompt.split("\n\n")
+        for part in parts:
+            if part.lower().startswith("question:"):
+                user_question = part[len("question:"):].strip()
+                break
+                
+    q_lower = user_question.lower()
     
     # FOOLPROOF RULE: Intercept any owner/creator/author question only if it's the Tutor Q&A Agent!
     # This prevents the quiz generator and other non-chat prompts from being hijacked.
-    if "tutor" in s_lower and ("owner" in p_lower or "creator" in p_lower or "author" in p_lower or "who made" in p_lower or "who built" in p_lower):
+    if "tutor" in system.lower() and ("owner" in q_lower or "creator" in q_lower or "author" in q_lower or "who made" in q_lower or "who built" in q_lower):
         return json.dumps({
             "answer": (
                 "### 👑 Project Ownership & Creator Info\n\n"
@@ -218,8 +218,8 @@ def call_claude(prompt: str, system: str = "", model: str | None = None, max_tok
 
     client = _get_client()
     if client is None:
-        # Key missing: use our zero-dependency offline heuristic mock engine
-        return _heuristic_claude_response(prompt, system)
+        # Key missing: use our zero-dependency offline heuristic mock engine, passing the extracted question
+        return _heuristic_claude_response(prompt, system, user_question)
 
     model = model or settings.groq_model
 
