@@ -113,6 +113,10 @@ def answer_question(repo_id: str, question: str, commit_lookup: dict[str, str] |
     )
 
     raw = call_claude(prompt, system=SYSTEM_PROMPT, max_tokens=1500)
+    
+    # Trace the unique files and chunks that were retrieved
+    retrieved_files = list(set(h["file_path"] for h in hits))
+    retrieved_chunks = list(set(h["chunk_id"] for h in hits))
 
     try:
         data = _extract_json(raw)
@@ -121,7 +125,15 @@ def answer_question(repo_id: str, question: str, commit_lookup: dict[str, str] |
             answer=data.get("answer", raw),
             citations=citations,
             grounded=data.get("grounded", False),
+            retrieved_files=retrieved_files,
+            retrieved_chunks=retrieved_chunks
         )
     except (json.JSONDecodeError, TypeError):
         # Degrade gracefully: raw text, clearly marked as ungrounded
-        return TutorAnswer(answer=raw, citations=[Citation(type="inference", ref="")], grounded=False)
+        return TutorAnswer(
+            answer=raw, 
+            citations=[Citation(type="inference", ref="")], 
+            grounded=False,
+            retrieved_files=retrieved_files,
+            retrieved_chunks=retrieved_chunks
+        )

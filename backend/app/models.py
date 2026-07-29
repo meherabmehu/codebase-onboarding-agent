@@ -69,6 +69,7 @@ class ArchitectureOverview(BaseModel):
     written_overview: str
     modules: list[ModuleNode]
     mermaid_diagram: str
+    project_owner: Optional[str] = "Unknown"
 
 
 # ---------- Curriculum Planner ----------
@@ -104,6 +105,8 @@ class TutorAnswer(BaseModel):
     answer: str
     citations: list[Citation]
     grounded: bool
+    retrieved_files: Optional[list[str]] = None
+    retrieved_chunks: Optional[list[str]] = None
 
 
 # ---------- Quiz ----------

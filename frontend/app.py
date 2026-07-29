@@ -1,5 +1,4 @@
 import os
-import json
 import requests
 import streamlit as st
 
@@ -140,7 +139,15 @@ with st.sidebar:
     # NEW CHAT BUTTON (Standard ChatGPT behavior)
     if st.button("➕ New Chat Thread", use_container_width=True, type="primary"):
         new_id = len(st.session_state.threads)
-        st.session_state.threads.insert(0, {"id": new_id, "title": f"Chat Session {new_id + 1}", "history": []})
+        st.session_state.threads.insert(0, {
+            "id": new_id, 
+            "title": f"Chat Session {new_id + 1}", 
+            "history": [],
+            "discussed_files": [],
+            "discussed_chunks": [],
+            "has_git_history": False,
+            "has_pr_discussions": False
+        })
         st.session_state.active_thread_id = new_id
         save_threads()
         st.rerun()
@@ -312,6 +319,32 @@ if st.session_state.repo_id:
                             data = resp.json()
                             answer = data["answer"]
                             citations = data.get("citations", [])
+                            ret_files = data.get("retrieved_files", []) or []
+                            ret_chunks = data.get("retrieved_chunks", []) or []
+                            
+                            # Update active thread metrics history
+                            if "discussed_files" not in active_thread:
+                                active_thread["discussed_files"] = []
+                            if "discussed_chunks" not in active_thread:
+                                active_thread["discussed_chunks"] = []
+                            if "has_git_history" not in active_thread:
+                                active_thread["has_git_history"] = False
+                            if "has_pr_discussions" not in active_thread:
+                                active_thread["has_pr_discussions"] = False
+                                
+                            for f in ret_files:
+                                if f not in active_thread["discussed_files"]:
+                                    active_thread["discussed_files"].append(f)
+                            for c in ret_chunks:
+                                if c not in active_thread["discussed_chunks"]:
+                                    active_thread["discussed_chunks"].append(c)
+                                    
+                            for cite in citations:
+                                if cite["type"] == "commit":
+                                    active_thread["has_git_history"] = True
+                                if cite["type"] == "pr":
+                                    active_thread["has_pr_discussions"] = True
+                                    active_thread["has_git_history"] = True
                             
                             # Render AI answer
                             with st.chat_message("assistant", avatar="🤖"):
@@ -416,60 +449,89 @@ if st.session_state.repo_id:
                                 if st.button("Unlock Next Step 🔓", type="primary", use_container_width=True):
                                     st.session_state.active_step = active_step_id + 1
                                     st.rerun()
-                            else:
-                                st.balloons()
-                                st.success("🎓 **CONGRATULATIONS! You have completed all lessons and successfully onboarded!**")
                         else:
                             st.error("❌ **REVISION SUGGESTED**")
                             st.markdown(feedback)
 
-        # --- TAB 3: DYNAMIC REAL-TIME PROGRESS & DIAGNOSTIC METRICS ---
+        # --- TAB 3: DYNAMIC REAL-TIME PROGRESS & DIAGNOSTIC METRICS (COMPREHENSIVELY REFACETORED!) ---
         with tab_analytics:
-            st.markdown("#### 📊 Dynamic Contributor Metrics & Diagnostic Report")
-            st.write("These metrics track codebase properties and update in real-time based on your active tutoring interactions!")
+            st.markdown("#### 📊 Dynamic Repository Metrics & Diagnostic Report")
+            st.write("These metrics track codebase properties and update in real-time based on your actual active discussion depth!")
             
+            # Fetch and calculate unique repository metrics
             num_exchanges = len(active_thread["history"])
             
-            # AT BEGINNING STATE (Empty Chat History): Metrics should be completely empty/unset!
+            # Gather all unique files declared across steps to find total repository files
+            all_files = set()
+            if curr and "steps" in curr:
+                for step in steps:
+                    for f in step.get("file_paths", []):
+                        all_files.add(f)
+            total_indexed_files = len(all_files) if all_files else 1
+            
+            disc_files = set(active_thread.get("discussed_files", []))
+            has_git = active_thread.get("has_git_history", False)
+            has_pr = active_thread.get("has_pr_discussions", False)
+            discussed_files_count = len(disc_files)
+            
+            # AT BEGINNING STATE (Empty Chat History): Metrics are completely unset!
             if num_exchanges == 0:
-                dynamic_doc_coverage = "--"
+                dynamic_coverage = "--"
+                dynamic_files_explored = "--"
                 dynamic_context_tier = "--"
-                dynamic_reviewer = "--"
+                dynamic_owner = "--"
                 diagnosis_msg = "Please type and send your first message in the '💬 Interactive Chat' tab to initiate real-time diagnostics."
             else:
-                # Active state: metrics update dynamically based on the exchange count
-                dynamic_doc_coverage = f"{min(100, 72 + num_exchanges * 4)}%"
+                # 1. Repository Coverage: unique files discussed / total indexed files
+                coverage_val = min(100, int((discussed_files_count / total_indexed_files) * 100))
+                dynamic_coverage = f"{coverage_val}%"
                 
-                if num_exchanges <= 2:
+                # 2. Files Explored: formatted count string
+                dynamic_files_explored = f"{discussed_files_count} / {total_indexed_files}"
+                
+                # 3. Historical Context: derived strictly from retrieval quality
+                if discussed_files_count == 0:
+                    dynamic_context_tier = "None"
+                elif discussed_files_count == 1 and not has_git:
+                    dynamic_context_tier = "Low"
+                elif discussed_files_count > 1 and not has_git:
                     dynamic_context_tier = "Medium"
-                elif num_exchanges <= 5:
+                elif has_git and not has_pr:
                     dynamic_context_tier = "High"
                 else:
                     dynamic_context_tier = "Comprehensive"
                     
-                dynamic_reviewer = "Md. Meherab Hossain Talukder"
-                diagnosis_msg = f"Onboarding Diagnostics (Exchanges: {num_exchanges}): Codebase loaded successfully. Suggested reviewer is Md. Meherab Hossain Talukder. As you chat more, Docstring Coverage and Historical Context indices will dynamically update on this screen real-time!"
+                # 4. Project Owner: resolved dynamically from the backend
+                dynamic_owner = arch.get("project_owner", "Unknown")
+                diagnosis_msg = f"Onboarding Diagnostics: Sourced repository owner is {dynamic_owner}. As you retrieve more codebase files or git logs in the chat, Repository Coverage and Historical Context will dynamically shift real-time!"
                 
-            col_m1, col_m2, col_m3 = st.columns(3)
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             with col_m1:
                 st.markdown(f"""
                 <div class='metric-card'>
-                    <span style='font-size: 0.85em; color: #64748b;'>DOCSTRING COVERAGE</span><br/>
-                    <span style='font-size: 1.8em; font-weight: bold; color: #27ae60;'>{dynamic_doc_coverage}</span>
+                    <span style='font-size: 0.8em; color: #64748b;'>REPO COVERAGE</span><br/>
+                    <span style='font-size: 1.8em; font-weight: bold; color: #27ae60;'>{dynamic_coverage}</span>
                 </div>
                 """, unsafe_allow_html=True)
             with col_m2:
                 st.markdown(f"""
                 <div class='metric-card'>
-                    <span style='font-size: 0.85em; color: #64748b;'>HISTORICAL CONTEXT</span><br/>
-                    <span style='font-size: 1.8em; font-weight: bold; color: #2980b9;'>{dynamic_context_tier}</span>
+                    <span style='font-size: 0.8em; color: #64748b;'>FILES EXPLORED</span><br/>
+                    <span style='font-size: 1.8em; font-weight: bold; color: #1e3a8a;'>{dynamic_files_explored}</span>
                 </div>
                 """, unsafe_allow_html=True)
             with col_m3:
                 st.markdown(f"""
                 <div class='metric-card'>
-                    <span style='font-size: 0.85em; color: #64748b;'>SUGGESTED REVIEWER</span><br/>
-                    <span style='font-size: 1.05em; font-weight: bold; color: #e67e22;'>{dynamic_reviewer}</span>
+                    <span style='font-size: 0.8em; color: #64748b;'>HISTORICAL CONTEXT</span><br/>
+                    <span style='font-size: 1.4em; font-weight: bold; color: #2980b9; margin-top: 5px; display: inline-block;'>{dynamic_context_tier}</span>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_m4:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <span style='font-size: 0.8em; color: #64748b;'>PROJECT OWNER</span><br/>
+                    <span style='font-size: 1.1em; font-weight: bold; color: #e67e22; margin-top: 8px; display: inline-block;'>{dynamic_owner}</span>
                 </div>
                 """, unsafe_allow_html=True)
                 
