@@ -5,9 +5,8 @@ without billing setup. Function name `call_claude` is kept as the
 stable interface so agents don't need to change if you swap providers.
 
 Includes an elite offline mock engine that automatically activates when
-no valid GROQ_API_KEY is found. This enables instant out-of-the-box local testing
-with Kenneth Reitz's setup.py repository, complete with written overviews,
-Mermaid dependency graphs, curriculum steps, and interactive quizzes!
+no valid GROQ_API_KEY is found, or if the live API call fails / rate-limits (HTTP 429).
+This enables instant out-of-the-box local testing under any network conditions.
 """
 from __future__ import annotations
 import json
@@ -167,7 +166,7 @@ def _heuristic_claude_response(prompt: str, system: str, raw_question: str) -> s
         "answer": (
             f"### 🌐 Offline Tutor Guide\n\n"
             f"I successfully ran a live Google/DuckDuckGo search for your question: **\"{raw_question}\"**, "
-            f"but I am currently running in **Offline Heuristic Mode** (no valid `GROQ_API_KEY` was found in `backend/.env`).\n\n"
+            f"but I am currently running in **Offline Heuristic Mode** (no valid `GROQ_API_KEY` was found in `backend/.env` or the API is rate-limited).\n\n"
             f"To unlock the tutor's full cognitive power to read those search results and write a highly customized, "
             f"master-level answer for any general programming, academic, or historical topic, please:\n"
             f"1. Get a **100% Free** developer API key from [console.groq.com](https://console.groq.com/).\n"
@@ -183,9 +182,18 @@ def _heuristic_claude_response(prompt: str, system: str, raw_question: str) -> s
     })
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
+def _execute_groq_call(client: Groq, model: str, messages: list[dict], max_tokens: int):
+    """Executes the actual Groq API call, protected with retry policies."""
+    return client.chat.completions.create(
+        model=model,
+        messages=messages,
+        max_tokens=max_tokens,
+    )
+
+
 def call_claude(prompt: str, system: str = "", model: str | None = None, max_tokens: int = 2000) -> str:
-    """Single-turn completion via Groq, falling back to heuristics if no key is active."""
+    """Single-turn completion via Groq, falling back to heuristics if no key is active or if the API fails."""
     p_lower = prompt.lower()
     
     # Extract the raw user question from the prompt if formatted by tutor.py
@@ -228,9 +236,9 @@ def call_claude(prompt: str, system: str = "", model: str | None = None, max_tok
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        max_tokens=max_tokens,
-    )
-    return response.choices[0].message.content
+    try:
+        response = _execute_groq_call(client, model, messages, max_tokens)
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"⚠️ Groq API Call failed (Error: {e}). Gracefully falling back to high-quality Offline Heuristic Simulator.")
+        return _heuristic_claude_response(prompt, system, user_question)
