@@ -3,9 +3,13 @@ Vector storage layer. Defaults to Chroma (local, no server needed - good
 for dev). Swap VECTOR_DB=qdrant in .env for production use with a real
 Qdrant instance.
 
-Includes an elite native Python in-memory fallback store to bypass any 
+Includes an elite native Python in-memory vector storage fallback to bypass any 
 potential native binary compilation failures or SQLite DLL crashes (e.g. 
 ChromaDB/hnswlib segfaults on Windows environments).
+
+Upgraded with an active, self-healing exception layer that automatically detects 
+and heals collection dimension mismatches (e.g., transitioning from offline 1024-dim
+to live OpenAI 1536-dim), ensuring zero manual directory deletions are ever needed.
 """
 from __future__ import annotations
 import os
@@ -61,14 +65,29 @@ def upsert_chunks(repo_id: str, chunks: list[CodeChunk], embeddings: list[list[f
         "linked_pr_numbers": ",".join(str(n) for n in c.linked_pr_numbers),
     } for c in chunks]
 
-    # If Chroma client is available, try upserting
+    # If Chroma client is available, try upserting with self-healing capabilities
     if client is not None:
         try:
             collection = client.get_or_create_collection(col_name)
             ids = [c.chunk_id for c in chunks]
             documents = [c.source for c in chunks]
-            collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
-            return
+            try:
+                collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
+                return
+            except Exception as e:
+                err_msg = str(e).lower()
+                # If there's a dimension mismatch (1024-dim vs 1536-dim), heal it automatically!
+                if "dimension" in err_msg or "dimensionality" in err_msg:
+                    print(f"⚠️ ChromaDB collection dimension mismatch detected. Automatically self-healing collection: {col_name}...")
+                    try:
+                        client.delete_collection(col_name)
+                        collection = client.get_or_create_collection(col_name)
+                        collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
+                        print("🎉 Self-healing complete! Collection recreated and upserted successfully.")
+                        return
+                    except Exception as e2:
+                        print(f"❌ ChromaDB self-healing failed: {e2}")
+                raise e
         except Exception as e:
             print(f"ChromaDB upsert failed, falling back to In-Memory vectors. Error: {e}")
 
