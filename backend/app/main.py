@@ -107,11 +107,17 @@ def ingest(req: RepoRequest):
     # PERFORMANCE OPTIMIZATION: If already ingested and cached, return immediately (0.00s!)
     if repo_id in _REPO_CACHE:
         result = _REPO_CACHE[repo_id]["ingest_result"]
+        unique_files = list(set(c.file_path for c in result.chunks))
+        total_classes = sum(1 for c in result.chunks if c.symbol_type == "class")
+        total_funcs = sum(1 for c in result.chunks if c.symbol_type in ("function", "method"))
         return {
             "repo_id": repo_id,
             "chunks_indexed": len(result.chunks),
             "commits_pulled": len(result.commits),
             "prs_pulled": len(result.prs),
+            "total_files_count": len(unique_files),
+            "total_classes_count": total_classes,
+            "total_functions_count": total_funcs
         }
 
     try:
@@ -124,11 +130,18 @@ def ingest(req: RepoRequest):
             "quiz_questions": {}, # step_number -> QuizQuestion
         }
 
+        unique_files = list(set(c.file_path for c in result.chunks))
+        total_classes = sum(1 for c in result.chunks if c.symbol_type == "class")
+        total_funcs = sum(1 for c in result.chunks if c.symbol_type in ("function", "method"))
+
         return {
             "repo_id": result.repo_id,
             "chunks_indexed": len(result.chunks),
             "commits_pulled": len(result.commits),
             "prs_pulled": len(result.prs),
+            "total_files_count": len(unique_files),
+            "total_classes_count": total_classes,
+            "total_functions_count": total_funcs
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
