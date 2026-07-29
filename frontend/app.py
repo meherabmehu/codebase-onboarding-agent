@@ -346,7 +346,7 @@ if st.session_state.repo_id:
             user_q = st.chat_input("Ask a question about the code or history...")
             
             if user_q:
-                # --- CONVERSATIONAL GITHUB INGESTION DETECTOR (100% Automated!) ---
+                # --- CONVERSATIONAL GITHUB INGESTION DETECTOR (100% Automated & Non-blocking!) ---
                 github_match = re.search(r'https?://github\.com/[a-zA-Z0-9_-]+/[a-zA-Z0-9._-]+', user_q)
                 if github_match:
                     repo_url_found = github_match.group(0).rstrip("+/ ")
@@ -359,7 +359,7 @@ if st.session_state.repo_id:
                                 st.session_state.repo_id = data["repo_id"]
                                 st.session_state.repo_title = repo_url_found.split("github.com/")[-1]
                                 
-                                # Lock in the new baseline counts for this session thread
+                                # Lock in the new baseline counts for this session thread (FIXES denonimator lock issue!)
                                 active_thread["total_files"] = data.get("total_files_count", 1) or 1
                                 active_thread["total_chunks"] = data.get("chunks_indexed", 1) or 1
                                 active_thread["total_classes"] = data.get("total_classes_count", 0) or 0
@@ -376,7 +376,6 @@ if st.session_state.repo_id:
                                 st.session_state.curriculum = None
                                 save_threads()
                                 st.success(f"🎉 Codebase hot-swapped to: {st.session_state.repo_title}!")
-                                st.rerun()
                         except Exception as e:
                             st.error(f"Failed to auto-ingest codebase: {e}")
                 
@@ -384,15 +383,9 @@ if st.session_state.repo_id:
                 with st.chat_message("user", avatar="👤"):
                     st.markdown(user_q)
                 active_thread["history"].append({"role": "user", "content": user_q})
-                
-                # Auto-update Thread Title based on first question
-                if len(active_thread["history"]) <= 2:
-                    short_title = user_q[:25] + "..." if len(user_q) > 25 else user_q
-                    active_thread["title"] = short_title
-                    
                 save_threads()
                 
-                # Call backend /ask
+                # Call backend /ask (No mid-turn rerun! Let it query the newly hot-swapped repo_id instantly!)
                 with st.spinner("Tutor is reading code..."):
                     try:
                         resp = requests.post(f"{BACKEND_URL}/ask", json={
@@ -578,10 +571,10 @@ if st.session_state.repo_id:
                 else:
                     dynamic_coverage = f"{coverage_pct:.1f}%"
                 
-                # Files Explored based on absolute baseline totals
+                # 2. Files Explored based on absolute baseline totals
                 dynamic_files_explored = f"{visited_files_count} / {total_files}"
                 
-                # Historical Context levels mapped strictly to context richness
+                # 3. Historical Context: derived strictly from retrieval quality
                 if visited_files_count == 0:
                     dynamic_context_tier = "Low"
                 elif visited_files_count == 1 and not has_git:
