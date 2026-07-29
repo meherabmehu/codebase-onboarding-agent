@@ -78,7 +78,19 @@ def load_threads():
                 return json.load(f)
         except Exception:
             pass
-    return [{"id": 0, "title": "New Chat Session", "history": []}]
+    return [{
+        "id": 0, 
+        "title": "New Chat Session", 
+        "history": [],
+        "total_files": 0,
+        "total_chunks": 0,
+        "total_classes": 0,
+        "total_functions": 0,
+        "visited_files": [],
+        "visited_chunks": [],
+        "has_git_history": False,
+        "has_pr_discussions": False
+    }]
 
 def save_threads():
     """Saves active chat threads to local JSON file."""
@@ -108,6 +120,15 @@ if "architecture" not in st.session_state:
 if "curriculum" not in st.session_state:
     st.session_state.curriculum = None
 
+# Helper to get the active thread
+def get_active_thread():
+    for thread in st.session_state.threads:
+        if thread["id"] == st.session_state.active_thread_id:
+            return thread
+    return st.session_state.threads[0]
+
+active_thread = get_active_thread()
+
 # Auto-Ingest setup.py on Startup if empty (Zero-click onboarding!)
 if not st.session_state.repo_id:
     try:
@@ -117,19 +138,24 @@ if not st.session_state.repo_id:
             data = resp.json()
             st.session_state.repo_id = data["repo_id"]
             st.session_state.repo_title = "setup.py (Demo)"
+            
+            # Baseline counts for startup thread
+            if len(st.session_state.threads) > 0:
+                first_thread = st.session_state.threads[0]
+                if not first_thread.get("total_files"):
+                    first_thread["total_files"] = data["total_files_count"]
+                    first_thread["total_chunks"] = data["chunks_indexed"]
+                    first_thread["total_classes"] = data["total_classes_count"]
+                    first_thread["total_functions"] = data["total_functions_count"]
+                    first_thread["visited_files"] = []
+                    first_thread["visited_chunks"] = []
+                    first_thread["has_git_history"] = False
+                    first_thread["has_pr_discussions"] = False
+                    save_threads()
     except Exception as e:
         # Handle connection failures gracefully
         st.error(f"Failed to auto-connect to backend at {BACKEND_URL}. Please verify uvicorn is running.")
         st.stop()
-
-# Helper to get the active thread
-def get_active_thread():
-    for thread in st.session_state.threads:
-        if thread["id"] == st.session_state.active_thread_id:
-            return thread
-    return st.session_state.threads[0]
-
-active_thread = get_active_thread()
 
 # --- SIDEBAR: CHAT SESSIONS & DEVELOPER OPTIONS ---
 with st.sidebar:
@@ -144,8 +170,12 @@ with st.sidebar:
             "id": new_id, 
             "title": f"Chat Session {new_id + 1}", 
             "history": [],
-            "discussed_files": [],
-            "discussed_chunks": [],
+            "total_files": 0,
+            "total_chunks": 0,
+            "total_classes": 0,
+            "total_functions": 0,
+            "visited_files": [],
+            "visited_chunks": [],
             "has_git_history": False,
             "has_pr_discussions": False
         })
@@ -215,7 +245,19 @@ with st.sidebar:
                         data = resp.json()
                         st.session_state.repo_id = data["repo_id"]
                         st.session_state.chat_history = []
-                        st.session_state.threads = [{"id": 0, "title": "New Chat Session", "history": []}]
+                        st.session_state.threads = [{
+                            "id": 0, 
+                            "title": "New Chat Session", 
+                            "history": [],
+                            "total_files": data["total_files_count"],
+                            "total_chunks": data["chunks_indexed"],
+                            "total_classes": data["total_classes_count"],
+                            "total_functions": data["total_functions_count"],
+                            "visited_files": [],
+                            "visited_chunks": [],
+                            "has_git_history": False,
+                            "has_pr_discussions": False
+                        }]
                         st.session_state.active_thread_id = 0
                         st.session_state.repo_title = repo_option if repo_option != "⚡ Link Custom GitHub Repo" else repo_url.split("github.com/")[-1]
                         save_threads()
@@ -233,6 +275,12 @@ if st.session_state.repo_id:
                 resp = requests.get(f"{BACKEND_URL}/architecture/{st.session_state.repo_id}", timeout=15)
                 if resp.status_code == 200:
                     st.session_state.architecture = resp.json()
+                    
+                    # Update thread metrics baseline if they were empty or uninitialized
+                    if not active_thread.get("total_files"):
+                        active_thread["total_files"] = st.session_state.architecture.get("total_files_count", 0)
+                        active_thread["total_chunks"] = st.session_state.architecture.get("total_chunks_count", 0)
+                        save_threads()
                 else:
                     st.error(f"Backend failed to map architecture (Status {resp.status_code}): {resp.text}")
                     st.stop()
@@ -262,7 +310,7 @@ if st.session_state.repo_id:
         st.markdown(f"## 🤖 Codebase Onboarding Agent: {st.session_state.repo_title}")
         st.caption("A clean, interactive assistant that teaches you the codebase entirely through natural conversation.")
         
-        # --- THE ULTRACLEAN TAB DECOUPLING SYSTEM (Chat & Analytics only, no Quizzes or Roadmap steps!) ---
+        # --- THE ULTRACLEAN TAB DECOUPLING SYSTEM ---
         tab_chat, tab_quiz, tab_analytics = st.tabs([
             "💬 Interactive Chat", 
             "✍️ Practice Quiz", 
@@ -323,23 +371,25 @@ if st.session_state.repo_id:
                             ret_files = data.get("retrieved_files", []) or []
                             ret_chunks = data.get("retrieved_chunks", []) or []
                             
-                            # Update active thread metrics history
-                            if "discussed_files" not in active_thread:
-                                active_thread["discussed_files"] = []
-                            if "discussed_chunks" not in active_thread:
-                                active_thread["discussed_chunks"] = []
+                            # Ensure clean metrics keys exist in the persistent thread
+                            if "visited_files" not in active_thread:
+                                active_thread["visited_files"] = []
+                            if "visited_chunks" not in active_thread:
+                                active_thread["visited_chunks"] = []
                             if "has_git_history" not in active_thread:
                                 active_thread["has_git_history"] = False
                             if "has_pr_discussions" not in active_thread:
                                 active_thread["has_pr_discussions"] = False
                                 
+                            # Update visited elements with DUPLICATE PROTECTION (Sets hashes under-the-hood)
                             for f in ret_files:
-                                if f not in active_thread["discussed_files"]:
-                                    active_thread["discussed_files"].append(f)
+                                if f not in active_thread["visited_files"]:
+                                    active_thread["visited_files"].append(f)
                             for c in ret_chunks:
-                                if c not in active_thread["discussed_chunks"]:
-                                    active_thread["discussed_chunks"].append(c)
+                                if c not in active_thread["visited_chunks"]:
+                                    active_thread["visited_chunks"].append(c)
                                     
+                            # Parse citation properties
                             for cite in citations:
                                 if cite["type"] == "commit":
                                     active_thread["has_git_history"] = True
@@ -454,50 +504,54 @@ if st.session_state.repo_id:
                             st.error("❌ **REVISION SUGGESTED**")
                             st.markdown(feedback)
 
-        # --- TAB 3: DYNAMIC REAL-TIME PROGRESS & DIAGNOSTIC METRICS (COMPREHENSIVELY REFACETORED!) ---
+        # --- TAB 3: DYNAMIC REAL-TIME PROGRESS & DIAGNOSTIC METRICS (COMPREHENSIVELY REFACETORED FROM SCRATCH!) ---
         with tab_analytics:
             st.markdown("#### 📊 Dynamic Repository Metrics & Diagnostic Report")
             st.write("These metrics track codebase properties and update in real-time based on your actual active discussion depth!")
             
-            # Fetch and calculate unique repository metrics
             num_exchanges = len(active_thread["history"])
             
-            # Fetch CONSTANT baseline counts directly from Architecture Overview!
-            total_files = arch.get("total_files_count", 0) or 1
+            # Retrieve the LOCKED baseline counts from current thread state
+            total_files = active_thread.get("total_files", 0) or arch.get("total_files_count", 1) or 1
+            total_chunks = active_thread.get("total_chunks", 0) or arch.get("total_chunks_count", 1) or 1
             
-            disc_files = set(active_thread.get("discussed_files", []))
+            # Fetch visited lists (duplicate protected via list-membership checks during appending)
+            visited_files_list = active_thread.get("visited_files", [])
+            visited_files_count = len(visited_files_list)
+            
             has_git = active_thread.get("has_git_history", False)
             has_pr = active_thread.get("has_pr_discussions", False)
-            discussed_files_count = len(disc_files)
             
-            # Project Owner resolved dynamically from backend
+            # Sourced project owner (100% dynamically resolved)
             dynamic_owner = arch.get("project_owner", "Unknown")
             
-            # AT BEGINNING STATE (No conversation started yet):
+            # 1. REVISION STATE: Check if conversation has actually started
             if num_exchanges == 0:
                 dynamic_coverage = "0%"
                 dynamic_files_explored = f"0 / {total_files}"
                 dynamic_context_tier = "Low"
                 diagnosis_msg = "Please type and send your first message in the '💬 Interactive Chat' tab to initiate real-time diagnostics."
+                
+                coverage_pct = 0.0
             else:
-                # 1. Repository Coverage: unique repository elements explored / total indexed elements (constant denominator!)
-                coverage_val = (discussed_files_count / total_files) * 100
-                if coverage_val == 0:
+                # Calculate Repository Coverage based on absolute baseline totals (never retrieved elements!)
+                coverage_pct = (visited_files_count / total_files) * 100
+                if coverage_pct == 0:
                     dynamic_coverage = "0%"
-                elif coverage_val < 1:
-                    dynamic_coverage = f"{coverage_val:.2f}%"
+                elif coverage_pct < 1:
+                    dynamic_coverage = f"{coverage_pct:.2f}%"
                 else:
-                    dynamic_coverage = f"{coverage_val:.1f}%"
+                    dynamic_coverage = f"{coverage_pct:.1f}%"
                 
-                # 2. Files Explored: unique explored files / total indexed files (constant denominator!)
-                dynamic_files_explored = f"{discussed_files_count} / {total_files}"
+                # Files Explored based on absolute baseline totals
+                dynamic_files_explored = f"{visited_files_count} / {total_files}"
                 
-                # 3. Historical Context: derived strictly from retrieval quality
-                if discussed_files_count == 0:
+                # Historical Context levels mapped strictly to context richness
+                if visited_files_count == 0:
                     dynamic_context_tier = "Low"
-                elif discussed_files_count == 1 and not has_git:
+                elif visited_files_count == 1 and not has_git:
                     dynamic_context_tier = "Low"
-                elif discussed_files_count > 1 and not has_git:
+                elif visited_files_count > 1 and not has_git:
                     dynamic_context_tier = "Medium"
                 elif has_git and not has_pr:
                     dynamic_context_tier = "High"
@@ -505,6 +559,15 @@ if st.session_state.repo_id:
                     dynamic_context_tier = "Comprehensive"
                     
                 diagnosis_msg = f"Onboarding Diagnostics: Sourced repository owner is {dynamic_owner}. As you retrieve more codebase files or git logs in the chat, Repository Coverage and Historical Context will dynamically shift real-time!"
+                
+            # 2. DEBUG REQUIREMENT: Output precise states to backend console for verification
+            print("======================================================", flush=True)
+            print("📊 METRICS DEBUG REPORT (STREAMLIT CONSOLE)", flush=True)
+            print(f"Total Indexed Files: {total_files}", flush=True)
+            print(f"Visited Files: {visited_files_list}", flush=True)
+            print(f"Coverage Formula: {visited_files_count} / {total_files}", flush=True)
+            print(f"Coverage Result: {coverage_pct:.2f}%", flush=True)
+            print("======================================================", flush=True)
                 
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
             with col_m1:
