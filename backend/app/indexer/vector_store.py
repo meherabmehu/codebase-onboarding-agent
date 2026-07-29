@@ -8,14 +8,19 @@ potential native binary compilation failures or SQLite DLL crashes (e.g.
 ChromaDB/hnswlib segfaults on Windows environments).
 
 Upgraded with an active, self-healing exception layer that automatically detects 
-and heals collection dimension mismatches (e.g., transitioning from offline 1024-dim
-to live OpenAI 1536-dim), ensuring zero manual directory deletions are ever needed.
+and heals collection dimension mismatches, and fully silences ChromaDB's internal 
+PostHog telemetry logs directly at the logging configuration level.
 """
 from __future__ import annotations
 import os
 import math
+import logging
 from app.config import settings
 from app.models import CodeChunk
+
+# Explicitly silence ChromaDB and PostHog logging streams to guarantee zero terminal spam!
+logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
+logging.getLogger("posthog").setLevel(logging.CRITICAL)
 
 # Safe import of chromadb
 try:
@@ -25,7 +30,6 @@ except Exception:
     HAS_CHROMADB = False
 
 # Global Thread-Safe In-Memory database fallback
-# Keyed by collection_name -> list of dicts: {"id": str, "embedding": list, "document": str, "metadata": dict}
 _IN_MEMORY_DB: dict[str, list[dict]] = {}
 
 
