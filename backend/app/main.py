@@ -146,6 +146,11 @@ def get_architecture(repo_id: str):
     result = cached["ingest_result"]
     owner = get_project_owner(result.repo_url, result.local_path)
     
+    # Calculate baseline counts directly from ingested repository chunks (100% accurate!)
+    unique_files = set(c.file_path for c in result.chunks)
+    total_files = len(unique_files)
+    total_chunks = len(result.chunks)
+    
     # PERFORMANCE OPTIMIZATION: If offline mode is active, return preloaded analysis instantly (0.01s!)
     if not is_valid_key(settings.groq_api_key) and not is_valid_key(settings.anthropic_api_key):
         overview = ArchitectureOverview(
@@ -176,13 +181,17 @@ def get_architecture(repo_id: str):
                 "  style A fill:#f9f9f9,stroke:#333\n"
                 "  style B fill:#eef3f7,stroke:#4a90e2,stroke-width:2px"
             ),
-            project_owner=owner
+            project_owner=owner,
+            total_files_count=total_files,
+            total_chunks_count=total_chunks
         )
         cached["architecture"] = overview
         return overview
 
     overview = map_architecture(repo_id, result.chunks)
     overview.project_owner = owner
+    overview.total_files_count = total_files
+    overview.total_chunks_count = total_chunks
     cached["architecture"] = overview
     return overview
 

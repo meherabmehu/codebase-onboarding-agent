@@ -70,6 +70,8 @@ class ArchitectureOverview(BaseModel):
     modules: list[ModuleNode]
     mermaid_diagram: str
     project_owner: Optional[str] = "Unknown"
+    total_files_count: Optional[int] = 0
+    total_chunks_count: Optional[int] = 0
 
 
 # ---------- Curriculum Planner ----------

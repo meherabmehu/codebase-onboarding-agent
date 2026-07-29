@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import streamlit as st
 
@@ -461,37 +462,39 @@ if st.session_state.repo_id:
             # Fetch and calculate unique repository metrics
             num_exchanges = len(active_thread["history"])
             
-            # Gather all unique files declared across steps to find total repository files
-            all_files = set()
-            if curr and "steps" in curr:
-                for step in steps:
-                    for f in step.get("file_paths", []):
-                        all_files.add(f)
-            total_indexed_files = len(all_files) if all_files else 1
+            # Fetch CONSTANT baseline counts directly from Architecture Overview!
+            total_files = arch.get("total_files_count", 0) or 1
             
             disc_files = set(active_thread.get("discussed_files", []))
             has_git = active_thread.get("has_git_history", False)
             has_pr = active_thread.get("has_pr_discussions", False)
             discussed_files_count = len(disc_files)
             
-            # AT BEGINNING STATE (Empty Chat History): Metrics are completely unset!
+            # Project Owner resolved dynamically from backend
+            dynamic_owner = arch.get("project_owner", "Unknown")
+            
+            # AT BEGINNING STATE (No conversation started yet):
             if num_exchanges == 0:
-                dynamic_coverage = "--"
-                dynamic_files_explored = "--"
-                dynamic_context_tier = "--"
-                dynamic_owner = "--"
+                dynamic_coverage = "0%"
+                dynamic_files_explored = f"0 / {total_files}"
+                dynamic_context_tier = "Low"
                 diagnosis_msg = "Please type and send your first message in the '💬 Interactive Chat' tab to initiate real-time diagnostics."
             else:
-                # 1. Repository Coverage: unique files discussed / total indexed files
-                coverage_val = min(100, int((discussed_files_count / total_indexed_files) * 100))
-                dynamic_coverage = f"{coverage_val}%"
+                # 1. Repository Coverage: unique repository elements explored / total indexed elements (constant denominator!)
+                coverage_val = (discussed_files_count / total_files) * 100
+                if coverage_val == 0:
+                    dynamic_coverage = "0%"
+                elif coverage_val < 1:
+                    dynamic_coverage = f"{coverage_val:.2f}%"
+                else:
+                    dynamic_coverage = f"{coverage_val:.1f}%"
                 
-                # 2. Files Explored: formatted count string
-                dynamic_files_explored = f"{discussed_files_count} / {total_indexed_files}"
+                # 2. Files Explored: unique explored files / total indexed files (constant denominator!)
+                dynamic_files_explored = f"{discussed_files_count} / {total_files}"
                 
                 # 3. Historical Context: derived strictly from retrieval quality
                 if discussed_files_count == 0:
-                    dynamic_context_tier = "None"
+                    dynamic_context_tier = "Low"
                 elif discussed_files_count == 1 and not has_git:
                     dynamic_context_tier = "Low"
                 elif discussed_files_count > 1 and not has_git:
@@ -501,8 +504,6 @@ if st.session_state.repo_id:
                 else:
                     dynamic_context_tier = "Comprehensive"
                     
-                # 4. Project Owner: resolved dynamically from the backend
-                dynamic_owner = arch.get("project_owner", "Unknown")
                 diagnosis_msg = f"Onboarding Diagnostics: Sourced repository owner is {dynamic_owner}. As you retrieve more codebase files or git logs in the chat, Repository Coverage and Historical Context will dynamically shift real-time!"
                 
             col_m1, col_m2, col_m3, col_m4 = st.columns(4)
