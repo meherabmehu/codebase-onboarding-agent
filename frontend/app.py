@@ -359,17 +359,24 @@ if st.session_state.repo_id:
                                 st.session_state.repo_id = data["repo_id"]
                                 st.session_state.repo_title = repo_url_found.split("github.com/")[-1]
                                 
-                                # Lock in the new baseline counts for this session thread (FIXES denonimator lock issue!)
-                                active_thread["total_files"] = data.get("total_files_count", 1) or 1
-                                active_thread["total_chunks"] = data.get("chunks_indexed", 1) or 1
-                                active_thread["total_classes"] = data.get("total_classes_count", 0) or 0
-                                active_thread["total_functions"] = data.get("total_functions_count", 0) or 0
-                                
-                                # Reset visited metrics completely for the new repository baseline!
-                                active_thread["visited_files"] = []
-                                active_thread["visited_chunks"] = []
-                                active_thread["has_git_history"] = False
-                                active_thread["has_pr_discussions"] = False
+                                # Start a brand-new, clean chat session thread for this new repository!
+                                # This completely prevents old setup.py context logs from bleeding into the new repo analysis!
+                                new_id = len(st.session_state.threads)
+                                st.session_state.threads.insert(0, {
+                                    "id": new_id, 
+                                    "title": f"Chat: {st.session_state.repo_title}", 
+                                    "history": [],
+                                    "total_files": data.get("total_files_count", 1) or 1,
+                                    "total_chunks": data.get("chunks_indexed", 1) or 1,
+                                    "total_classes": data.get("total_classes_count", 0) or 0,
+                                    "total_functions": data.get("total_functions_count", 0) or 0,
+                                    "visited_files": [],
+                                    "visited_chunks": [],
+                                    "has_git_history": False,
+                                    "has_pr_discussions": False
+                                })
+                                st.session_state.active_thread_id = new_id
+                                active_thread = st.session_state.threads[0] # Hot-swap active thread reference!
                                 
                                 # Reset frontend local caches to force architecture and curriculum reload
                                 st.session_state.architecture = None
