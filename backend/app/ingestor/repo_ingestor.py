@@ -94,34 +94,40 @@ def ingest_repo(repo_url: str, max_commits: int | None = None) -> IngestResult:
     # ======================================================
     print("======================================================", flush=True)
     print("📁 REPOSITORY INDEXING TRACE REPORT", flush=True)
-    print(f"Repository root path: {local_path}", flush=True)
+    print(f"Repository Root: {local_path}", flush=True)
     
     dirs_discovered = 0
     files_discovered = 0
     supported_files_count = 0
+    ignored_elements_count = 0
     EXT_TO_LANG = {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rs", ".java"}
     
     for root, dirs, files in os.walk(local_path):
+        # Count ignored directories
+        ignored_dirs = [d for d in dirs if d in {".git", "node_modules", "venv", ".venv", "dist", "build"}]
+        ignored_elements_count += len(ignored_dirs)
+        
         dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "venv", ".venv", "dist", "build"}]
         dirs_discovered += len(dirs)
+        
         for f in files:
             files_discovered += 1
             if os.path.splitext(f)[1] in EXT_TO_LANG:
                 supported_files_count += 1
+            else:
+                ignored_elements_count += 1
                 
     indexed_files_set = sorted(list(set(c.file_path for c in chunks)))
     
-    print(f"Number of directories discovered: {dirs_discovered}", flush=True)
-    print(f"Number of files discovered: {files_discovered}", flush=True)
-    print(f"Number of supported source files: {supported_files_count}", flush=True)
-    print(f"Number of indexed files: {len(indexed_files_set)}", flush=True)
+    print(f"Total Directories Found: {dirs_discovered}", flush=True)
+    print(f"Total Files Found: {files_discovered}", flush=True)
+    print(f"Supported Source Files Found: {supported_files_count}", flush=True)
+    print(f"Ignored Files: {ignored_elements_count}", flush=True)
+    print(f"Indexed Files: {len(indexed_files_set)}", flush=True)
+    print(f"Indexed Chunks: {len(chunks)}", flush=True)
     
-    print("\n--- First 30 indexed file paths ---", flush=True)
-    for idx, f in enumerate(indexed_files_set[:30]):
-        print(f"  {idx+1}. {f}", flush=True)
-        
-    print("\n--- Last 30 indexed file paths ---", flush=True)
-    for idx, f in enumerate(indexed_files_set[-30:]):
+    print("\n--- First 50 indexed file paths ---", flush=True)
+    for idx, f in enumerate(indexed_files_set[:50]):
         print(f"  {idx+1}. {f}", flush=True)
         
     if len(indexed_files_set) == 1:

@@ -7,9 +7,9 @@ Includes an elite native Python in-memory vector storage fallback to bypass any
 potential native binary compilation failures or SQLite DLL crashes (e.g. 
 ChromaDB/hnswlib segfaults on Windows environments).
 
-Upgraded with an active, self-healing exception layer that automatically detects 
-and heals collection dimension mismatches, and fully silences ChromaDB's internal 
-PostHog telemetry logs directly at the logging configuration level.
+Upgraded with safe, chunked batching (size of 100) to completely prevent 
+Windows SQLite "too many SQL variables" parameter limits crashes on large repositories, 
+plus automated dimensional self-healing.
 """
 from __future__ import annotations
 import os
@@ -69,29 +69,40 @@ def upsert_chunks(repo_id: str, chunks: list[CodeChunk], embeddings: list[list[f
         "linked_pr_numbers": ",".join(str(n) for n in c.linked_pr_numbers),
     } for c in chunks]
 
-    # If Chroma client is available, try upserting with self-healing capabilities
+    # If Chroma client is available, try upserting
     if client is not None:
         try:
             collection = client.get_or_create_collection(col_name)
-            ids = [c.chunk_id for c in chunks]
-            documents = [c.source for c in chunks]
-            try:
-                collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
-                return
-            except Exception as e:
-                err_msg = str(e).lower()
-                # If there's a dimension mismatch (1024-dim vs 1536-dim), heal it automatically!
-                if "dimension" in err_msg or "dimensionality" in err_msg:
-                    print(f"⚠️ ChromaDB collection dimension mismatch detected. Automatically self-healing collection: {col_name}...")
-                    try:
-                        client.delete_collection(col_name)
-                        collection = client.get_or_create_collection(col_name)
-                        collection.upsert(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
-                        print("🎉 Self-healing complete! Collection recreated and upserted successfully.")
-                        return
-                    except Exception as e2:
-                        print(f"❌ ChromaDB self-healing failed: {e2}")
-                raise e
+            
+            # SAFE BATCHING: Batch in groups of 100 to completely avoid SQLite parameter limit crashes on Windows (too many variables)
+            batch_size = 100
+            for idx in range(0, len(chunks), batch_size):
+                b_chunks = chunks[idx : idx + batch_size]
+                b_embeddings = embeddings[idx : idx + batch_size]
+                b_metadatas = metadatas[idx : idx + batch_size]
+                
+                ids = [c.chunk_id for c in b_chunks]
+                documents = [c.source for c in b_chunks]
+                
+                try:
+                    collection.upsert(ids=ids, embeddings=b_embeddings, documents=documents, metadatas=b_metadatas)
+                except Exception as e:
+                    err_msg = str(e).lower()
+                    # If there's a dimension mismatch (1024-dim vs 1536-dim), heal it automatically!
+                    if "dimension" in err_msg or "dimensionality" in err_msg:
+                        print(f"⚠️ ChromaDB collection dimension mismatch detected. Automatically self-healing collection: {col_name}...")
+                        try:
+                            client.delete_collection(col_name)
+                            collection = client.get_or_create_collection(col_name)
+                            # Retry batch upsert after delete
+                            collection.upsert(ids=ids, embeddings=b_embeddings, documents=documents, metadatas=b_metadatas)
+                            print("🎉 Self-healing complete! Collection recreated and upserted successfully.")
+                        except Exception as e2:
+                            print(f"❌ ChromaDB self-healing failed: {e2}")
+                            raise e2
+                    else:
+                        raise e
+            return
         except Exception as e:
             print(f"ChromaDB upsert failed, falling back to In-Memory vectors. Error: {e}")
 
