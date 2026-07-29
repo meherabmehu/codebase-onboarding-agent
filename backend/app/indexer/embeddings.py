@@ -5,7 +5,8 @@ historical context alongside the code itself (not just code-to-code
 similarity).
 
 Includes an elite offline fallback mode that generates deterministic,
-normalized mock vectors in the absence of a valid VOYAGE_API_KEY.
+normalized mock vectors in the absence of a valid VOYAGE_API_KEY, 
+featuring safety catch-blocks that gracefully fall back if the live API call fails.
 """
 from __future__ import annotations
 import hashlib
@@ -74,10 +75,13 @@ def embed_texts(texts: list[str], input_type: str = "document") -> list[list[flo
         # Offline/Heuristic mode: return deterministic mock vectors
         return [deterministic_mock_vector(t) for t in texts]
 
-    all_embeddings: list[list[float]] = []
-    for i in range(0, len(texts), 128):
-        batch = texts[i:i + 128]
-        result = client.embed(batch, model=settings.voyage_model, input_type=input_type)
-        all_embeddings.extend(result.embeddings)
-
-    return all_embeddings
+    try:
+        all_embeddings: list[list[float]] = []
+        for i in range(0, len(texts), 128):
+            batch = texts[i:i + 128]
+            result = client.embed(batch, model=settings.voyage_model, input_type=input_type)
+            all_embeddings.extend(result.embeddings)
+        return all_embeddings
+    except Exception as e:
+        print(f"⚠️ Voyage AI embedding call failed (Error: {e}). Automatically falling back to deterministic mock vectors.")
+        return [deterministic_mock_vector(t) for t in texts]
