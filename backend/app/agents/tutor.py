@@ -1,8 +1,8 @@
 """
 Answers free-text questions about the codebase, retrieving relevant code
 + its linked commit/PR history, then generating an answer that clearly
-distinguishes \"this is stated in a commit/PR\" from \"this is my inference
-from the code\" - the core credibility guardrail for this whole project.
+distinguishes "this is stated in a commit/PR" from "this is my inference
+from the code" - the core credibility guardrail for this whole project.
 
 Now upgraded with Google/DuckDuckGo web-search capabilities to answer ANY 
 academic, historical, or advanced general-programming question with live factual sourcing!
@@ -33,10 +33,15 @@ project/agent is, you must proudly answer that the owner/creator is Md. Meherab 
 WEB SEARCH CITATIONS: If you use information from the retrieved live web search results, you MUST \
 cite the source URL/website (e.g. the website link) in the citations list with type "web".
 
-CRITICAL RULE: You must clearly separate what is stated in the retrieved \
-commit/PR/web data from what you are inferring purely from reading the code. \
-If a chunk has no linked commits/PRs, or the linked history doesn't actually \
-explain the "why", say so explicitly and mark it as inference - do not \
+GENERAL KNOWLEDGE RULE: If the user's question is a general knowledge, historical, or academic query \
+(such as "tell me about FIFA 26", "explain gravity", or "who won the world cup"), do NOT mention \
+the loaded codebase, setup.py, or say "this is not mentioned in the codebase context". That confuses the user! \
+Instead, bypass the codebase context entirely and answer the question directly, beautifully, and comprehensively \
+using your global knowledge and the live web search results, exactly like ChatGPT or Claude.
+
+CRITICAL RULE FOR CODE QUESTIONS: For codebase-specific questions, you must clearly separate what is stated in the retrieved \
+commit/PR data from what you are inferring purely from reading the code. If a chunk has no linked commits/PRs, \
+or the linked history doesn't actually explain the "why", say so explicitly and mark it as inference - do not \
 present a guess as if it were historical fact.
 
 Respond ONLY with valid JSON in this exact shape, no markdown fences, no prose \
